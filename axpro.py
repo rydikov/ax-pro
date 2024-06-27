@@ -6,7 +6,6 @@ import logging
 import urllib.parse
 import xml.etree.ElementTree as ET
 
-from xml.etree import ElementTree
 from datetime import datetime
 
 from endpoints import Endpoints
@@ -15,7 +14,7 @@ XML_SCHEMA = "http://www.hikvision.com/ver20/XMLSchema"
 
 def get_mac_address_of_interface(xml_data, interface_id):
     try:
-        root = ElementTree.fromstring(xml_data)
+        root = ET.fromstring(xml_data)
         namespaces = {'xmlns': XML_SCHEMA}        
         for ni_element in root.findall('xmlns:NetworkInterface', namespaces):
             if ni_element.find('xmlns:id', namespaces).text == str(interface_id):
@@ -109,7 +108,7 @@ class AxPro:
         response = requests.get(f"http://{q_user}:{q_password}@{self.host}{Endpoints.Session_Capabilities}{q_user}")
 
         if response.status_code == 200:
-            root = ElementTree.fromstring(response.text)
+            root = ET.fromstring(response.text)
             namespaces = {'xmlns': XML_SCHEMA}
             session_id = root.findtext("xmlns:sessionID", default=None, namespaces=namespaces)
             challenge = root.findtext("xmlns:challenge", default=None, namespaces=namespaces)
@@ -139,8 +138,9 @@ class AxPro:
 
         if login_response.status_code == 200:
             cookie = login_response.headers.get("Set-Cookie")
+
             if cookie is None:
-                root = ElementTree.fromstring(login_response.text)
+                root = ET.fromstring(login_response.text)
                 namespaces = {'xmlns': XML_SCHEMA}
                 session_id = root.findtext("xmlns:sessionID", default=None, namespaces=namespaces)
                 if session_id is not None:
