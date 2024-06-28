@@ -1,30 +1,15 @@
-from typing import Optional, Any
-
 import hashlib
-import requests
 import logging
+import requests
 import urllib.parse
 import xml.etree.ElementTree as ET
 
+from typing import Optional, Any
 from datetime import datetime
 
 from endpoints import Endpoints
 
 XML_SCHEMA = "http://www.hikvision.com/ver20/XMLSchema"
-
-def get_mac_address_of_interface(xml_data, interface_id):
-    try:
-        root = ET.fromstring(xml_data)
-        namespaces = {'xmlns': XML_SCHEMA}        
-        for ni_element in root.findall('xmlns:NetworkInterface', namespaces):
-            if ni_element.find('xmlns:id', namespaces).text == str(interface_id):
-                link_elm = ni_element.find('xmlns:Link', namespaces)
-                return link_elm.find('xmlns:MACAddress', namespaces).text
-    except Exception as ex:
-        return ''
-    
-    return ''
-
 
 def sha256(input_string: str) -> str:
     sha256 = hashlib.sha256(input_string.encode())
@@ -43,10 +28,9 @@ class AuthError(UnexpectedResponseCodeError):
 
 
 class Method:
-    GET = "GET"
-    POST = "POST"
-    PUT = "PUT"
-    DELETE = "DELETE"
+    GET = 'GET'
+    POST = 'POST'
+    PUT = 'PUT'
 
 
 class SessionLoginCap:
@@ -66,15 +50,12 @@ class SessionLoginCap:
             result = sha256(f"{self.username}{self.salt}{self.password}")
             result = sha256(f"{self.username}{self.salt2}{result}")
             result = sha256(f"{result}{self.challenge}")
-
             for i in range(2, self.iteration):
                 result = sha256(result)
         else:
             result = f"{sha256(self.password)}{self.challenge}"
-
             for i in range(1, self.iteration):
                 result = sha256(result)
-
         return result
     
     def auth_xml(self):
@@ -102,9 +83,11 @@ class AxPro:
         self.cookie = ''
 
 
-    def auth(self):
+    def _auth(self):
         q_user = urllib.parse.quote(self.username)
         q_password = urllib.parse.quote(self.password)
+
+        # Step 1: Get XML auth data with panel username and password
         response = requests.get(f"http://{q_user}:{q_password}@{self.host}{Endpoints.Session_Capabilities}{q_user}")
 
         if response.status_code == 200:
@@ -131,7 +114,7 @@ class AxPro:
         )
         xml = session_cap.auth_xml()
 
-        # Try to authenticate
+        # Step 2: Authenticate with XML and save cookies
         timestamp = datetime.now().timestamp()
         session_login_url = f"http://{self.host}{Endpoints.Session_Login}?timeStamp={int(timestamp)}"
         login_response = requests.post(session_login_url, xml)
@@ -156,126 +139,92 @@ class AxPro:
             raise AuthError(login_response.status_code, login_response.text)
         
         
-    @staticmethod
-    def build_url(endpoint, is_json):
+    def url(self, endpoint):
+        return f'http://{self.host}{endpoint}'
+    
+    def json_url(self, endpoint):
+        url = self.url(endpoint)
         param_prefix = "&" if "?" in endpoint else "?"
-        return f"{endpoint}{param_prefix}format=json" if is_json else endpoint
+        return f'{url}{param_prefix}format=json'
 
-    def _base_json_request(self, url: str, method: Method = Method.GET, data=None):
-        endpoint = self.build_url(url, True)
-        response = self.make_request(endpoint, method, is_json=True, data=data)
 
-        if response.status_code != 200:
-            raise UnexpectedResponseCodeError(response.status_code, response.text)
-        if response.status_code == 200:
-            return response.json()
+    def make_request(self, url, method=Method.GET, data=None, json=None):
+        request_func = {
+            Method.GET: requests.get,
+            Method.POST: requests.post,
+            Method.PUT: requests.put
+        }[method]
 
-    def make_request(self, endpoint, method, data=None, is_json=False):
-        headers = {"Cookie": self.cookie}
-
-        if method == Method.GET:
-            response = requests.get(endpoint, headers=headers)
-        elif method == Method.POST:
-            if is_json:
-                response = requests.post(endpoint, json=data, headers=headers)
-            else:
-                response = requests.post(endpoint, data=data, headers=headers)
-        elif method == Method.PUT:
-            if is_json:
-                response = requests.put(endpoint, json=data, headers=headers)
-            else:
-                response = requests.put(endpoint, data=data, headers=headers)
-        else:
-            return None
+        response = request_func(url, headers={"Cookie": self.cookie}, data=data, json=json)
 
         if response.status_code == 401:
-            self.auth()
-            response = self.make_request(endpoint, method, data, is_json)
+            self._auth()
+            response = self.make_request(url, method, data, json)
+        elif response.status_code != 200:
+            raise UnexpectedResponseCodeError(response.status_code, response.text)
 
         return response
 
-    def arm_home(self, sub_id: Optional[int] = None):
-        sid = "0xffffffff" if sub_id is None else str(sub_id)
-        return self._base_json_request(f"http://{self.host}{Endpoints.Alarm_ArmHome.replace('{}', sid)}",
-                                       method=Method.PUT)
+    def arm_home(self, sub_id="0xffffffff"):
+        return self.make_request(
+            self.json_url(Endpoints.Alarm_ArmHome.format(sub_id)), 
+            method=Method.PUT
+        ).json()
 
-    def arm_away(self, sub_id: Optional[int] = None):
-        sid = "0xffffffff" if sub_id is None else str(sub_id)
-        return self._base_json_request(f"http://{self.host}{Endpoints.Alarm_ArmAway.replace('{}', sid)}",
-                                       method=Method.PUT)
+    def arm_away(self, sub_id="0xffffffff"):
+        return self.make_request(
+            self.json_url(Endpoints.Alarm_ArmAway.format(sub_id)), 
+            method=Method.PUT
+        ).json()
 
-    def disarm(self, sub_id: Optional[int] = None):
-        sid = "0xffffffff" if sub_id is None else str(sub_id)
-        return self._base_json_request(f"http://{self.host}{Endpoints.Alarm_Disarm.replace('{}', sid)}",
-                                       method=Method.PUT)
-
-    def subsystem_status(self):
-        return self._base_json_request(f"http://{self.host}{Endpoints.SubSystemStatus}")
+    def disarm(self, sub_id="0xffffffff"):
+        return self.make_request(
+            self.json_url(Endpoints.Alarm_Disarm.format(sub_id)), 
+            method=Method.PUT
+        ).json()
 
     def peripherals_status(self):
-        return self._base_json_request(f"http://{self.host}{Endpoints.PeripheralsStatus}")
-
-    def zone_status(self):
-        endpoint = f"http://{self.host}{Endpoints.ZoneStatus}"
-        endpoint = self.build_url(endpoint, True)
-        response = self.make_request(endpoint, Method.GET)
-
-        if response.status_code != 200:
-            raise UnexpectedResponseCodeError(response.status_code, response.text)
-
-        return response.json()
+        return self.make_request(
+            self.json_url(Endpoints.PeripheralsStatus)
+        ).json()
 
     def bypass_zone(self, zone_id):
-        endpoint = f"http://{self.host}{Endpoints.BypassZone}{zone_id}"
-        endpoint = self.build_url(endpoint, True)
-        response = self.make_request(endpoint, Method.PUT)
-
-        if response.status_code != 200:
-            raise UnexpectedResponseCodeError(response.status_code, response.text)
-
-        return response.status_code == 200
+        return self.make_request(
+            self.json_url(Endpoints.BypassZone.format(zone_id)),
+            method=Method.PUT
+        ).json()
 
     def recover_bypass_zone(self, zone_id):
-        endpoint = f"http://{self.host}{Endpoints.RecoverBypassZone}{zone_id}"
-        endpoint = self.build_url(endpoint, True)
-        response = self.make_request(endpoint, Method.PUT)
+        return self.make_request(
+            self.json_url(Endpoints.RecoverBypassZone.format(zone_id)),
+            method=Method.PUT
+        ).json()
 
-        return response.status_code == 200
-
-    def get_interface_mac_address(self, interface_id):
-        endpoint = f"http://{self.host}{Endpoints.InterfaceInfo}"
-
-        response = self.make_request(endpoint, Method.GET)
-
-        if response.status_code == 200:
-            return get_mac_address_of_interface(response.text, interface_id)
-
-        return ''
 
     def get_area_arm_status(self, area_id):
-        endpoint = f"http://{self.host}{Endpoints.AreaArmStatus}"
-        endpoint = self.build_url(endpoint, True)
-
-        data = {"SubSysList": [{"SubSys": {"id": area_id}}]}
-
-        response = self.make_request(endpoint, Method.POST, data=data, is_json=True)
-
-        try:
-            if response.status_code == 200:
-                response_json = response.json()
-                return response_json["ArmStatusList"][0]["ArmStatus"]["status"]
-        except:
-            return ''
-        return ''
-
+        return self.make_request(
+            self.json_url(Endpoints.AreaArmStatus), 
+            Method.POST, 
+            json={"SubSysList": [{"SubSys": {"id": area_id}}]}
+        ).json()
+    
+    def zone_status(self):
+        return self.make_request(self.json_url(Endpoints.ZoneStatus)).json()
+        
+    def subsystem_status(self):
+        return self.make_request(self.json_url(Endpoints.SubSystemStatus)).json()
+    
     def host_status(self):
-        return self._base_json_request(f"http://{self.host}{Endpoints.HostStatus}")
+        return self.make_request(self.json_url(Endpoints.HostStatus)).json()
 
     def siren_status(self):
-        return self._base_json_request(f"http://{self.host}{Endpoints.SirenStatus}")
+        return self.make_request(self.json_url(Endpoints.SirenStatus)).json()
 
     def keypad_status(self):
-        return self._base_json_request(f"http://{self.host}{Endpoints.KeypadStatus}")
+        return self.make_request(self.json_url(Endpoints.KeypadStatus)).json()
 
     def repeater_status(self):
-        return self._base_json_request(f"http://{self.host}{Endpoints.RepeaterStatus}")
+        return self.make_request(self.json_url(Endpoints.RepeaterStatus)).json()
+    
+    def get_interfaces_info(self):
+        return self.make_request(self.url(Endpoints.InterfacesInfo)).text
