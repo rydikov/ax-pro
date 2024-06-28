@@ -7,20 +7,27 @@ from datetime import datetime
 
 XML_SCHEMA = "http://www.hikvision.com/ver20/XMLSchema"
 
+
 def sha256(input_string: str) -> str:
     sha256 = hashlib.sha256(input_string.encode())
     return sha256.hexdigest()
 
+
 class IncorrectResponseContentError(Exception):
     def __init__(self):
-        super().__init__("Response content is not in expected form.")    
+        super().__init__("Response content is not in expected form.")
+
 
 class UnexpectedResponseCodeError(Exception):
     def __init__(self, responseCode, responseText):
-        super().__init__(f"Unexpected response status code {responseCode} returned with message {responseText}")
+        super().__init__(
+            f"Unexpected response status code {responseCode} returned with message {responseText}"
+        )
+
 
 class AuthError(UnexpectedResponseCodeError):
     pass
+
 
 class Endpoints:
     Session_Capabilities = "/ISAPI/Security/sessionLogin/capabilities?username="
@@ -48,8 +55,8 @@ class Endpoints:
     Zones = "/ISAPI/SecurityCP/Configuration/zones/"
     ArmStatus = "/ISAPI/SecurityCP/status/armStatus"
     StatusCap = "/ISAPI/SecurityCP/status/capabilities"
-    HostStatus = "/ISAPI/SecurityCP/status/host"  
-    PeripheralsStatus = "/ISAPI/SecurityCP/status/exDevStatus"  
+    HostStatus = "/ISAPI/SecurityCP/status/host"
+    PeripheralsStatus = "/ISAPI/SecurityCP/status/exDevStatus"
     ZoneStatus = "/ISAPI/SecurityCP/status/zones"
     BypassZone = "/ISAPI/SecurityCP/control/bypass/{}"
     RecoverBypassZone = "/ISAPI/SecurityCP/control/Recoverbypass/{}"
@@ -58,6 +65,7 @@ class Endpoints:
     SirenStatus = "/ISAPI/SecurityCP/status/sirenStatus"
     RepeaterStatus = "/ISAPI/SecurityCP/status/repeaterStatus"
     KeypadStatus = "/ISAPI/SecurityCP/status/keypadStatus"
+
 
 class Method:
     GET = 'GET'
@@ -73,7 +81,6 @@ class SessionLoginCap:
         self.salt2 = salt2
         self.is_irreversible = is_irreversible
         self.iteration = iteration
-        
         self.username = username
         self.password = password
 
@@ -89,10 +96,9 @@ class SessionLoginCap:
             for i in range(1, self.iteration):
                 result = sha256(result)
         return result
-    
+
     def auth_xml(self):
         root = ET.Element('SessionLogin')
-        
         child1 = ET.SubElement(root, 'sessionID')
         child1.text = self.session_id
         child2 = ET.SubElement(root, 'userName')
@@ -101,9 +107,8 @@ class SessionLoginCap:
         child3.text = self.encode_password()
         child4 = ET.SubElement(root, 'sessionIDVersion')
         child4.text = "2.1"
-
         return ET.tostring(root, encoding='utf-8', method='xml')
-        
+
 
 class AxPro:
     """HikVisison Ax Pro Alarm panel coordinator."""
@@ -113,7 +118,6 @@ class AxPro:
         self.username = username
         self.password = password
         self.cookie = ''
-
 
     def _auth(self):
         q_user = urllib.parse.quote(self.username)
@@ -133,7 +137,7 @@ class AxPro:
             iterations = root.findtext("xmlns:iterations", default=None, namespaces=namespaces)
         else:
             raise IncorrectResponseContentError
-        
+
         session_cap = SessionLoginCap(
             session_id=session_id,
             challenge=challenge,
@@ -169,16 +173,14 @@ class AxPro:
             self.cookie = cookie
         else:
             raise AuthError(login_response.status_code, login_response.text)
-        
-        
+
     def url(self, endpoint):
         return f'http://{self.host}{endpoint}'
-    
+
     def json_url(self, endpoint):
         url = self.url(endpoint)
         param_prefix = "&" if "?" in endpoint else "?"
         return f'{url}{param_prefix}format=json'
-
 
     def make_request(self, url, method=Method.GET, data=None, json=None):
         request_func = {
@@ -199,19 +201,19 @@ class AxPro:
 
     def arm_home(self, sub_id="0xffffffff"):
         return self.make_request(
-            self.json_url(Endpoints.Alarm_ArmHome.format(sub_id)), 
+            self.json_url(Endpoints.Alarm_ArmHome.format(sub_id)),
             method=Method.PUT
         ).json()
 
     def arm_away(self, sub_id="0xffffffff"):
         return self.make_request(
-            self.json_url(Endpoints.Alarm_ArmAway.format(sub_id)), 
+            self.json_url(Endpoints.Alarm_ArmAway.format(sub_id)),
             method=Method.PUT
         ).json()
 
     def disarm(self, sub_id="0xffffffff"):
         return self.make_request(
-            self.json_url(Endpoints.Alarm_Disarm.format(sub_id)), 
+            self.json_url(Endpoints.Alarm_Disarm.format(sub_id)),
             method=Method.PUT
         ).json()
 
@@ -232,20 +234,19 @@ class AxPro:
             method=Method.PUT
         ).json()
 
-
     def get_area_arm_status(self, area_id):
         return self.make_request(
-            self.json_url(Endpoints.AreaArmStatus), 
-            Method.POST, 
+            self.json_url(Endpoints.AreaArmStatus),
+            Method.POST,
             json={"SubSysList": [{"SubSys": {"id": area_id}}]}
         ).json()
-    
+
     def zone_status(self):
         return self.make_request(self.json_url(Endpoints.ZoneStatus)).json()
-        
+
     def subsystem_status(self):
         return self.make_request(self.json_url(Endpoints.SubSystemStatus)).json()
-    
+
     def host_status(self):
         return self.make_request(self.json_url(Endpoints.HostStatus)).json()
 
@@ -257,6 +258,6 @@ class AxPro:
 
     def repeater_status(self):
         return self.make_request(self.json_url(Endpoints.RepeaterStatus)).json()
-    
+
     def get_interfaces_info(self):
         return self.make_request(self.url(Endpoints.InterfacesInfo)).text
