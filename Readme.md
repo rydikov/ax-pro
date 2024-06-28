@@ -1,3 +1,8 @@
+## Install
+```bash
+pip install -e .
+```
+
 ## Usage
 ```python
 from axpro import AxPro
