@@ -59,10 +59,12 @@ class Endpoints:
     PeripheralsStatus = "/ISAPI/SecurityCP/status/exDevStatus"
     ZoneStatus = "/ISAPI/SecurityCP/status/zones"
     BypassZone = "/ISAPI/SecurityCP/control/bypass/{}"
-    RecoverBypassZone = "/ISAPI/SecurityCP/control/Recoverbypass/{}"
+    RecoverBypassZone = "/ISAPI/SecurityCP/control/bypassRecover/{}"
     InterfacesInfo = "/ISAPI/System/Network/interfaces"
     AreaArmStatus = "/ISAPI/SecurityCP/status/armStatus"
+    BatteriesStatus = "/ISAPI/SecurityCP/status/batteries"
     SirenStatus = "/ISAPI/SecurityCP/status/sirenStatus"
+    SirenTest = "/ISAPI/SecurityCP/Configuration/wirelessSiren/{}/ctrl"
     RepeaterStatus = "/ISAPI/SecurityCP/status/repeaterStatus"
     KeypadStatus = "/ISAPI/SecurityCP/status/keypadStatus"
 
@@ -210,18 +212,13 @@ class AxPro:
             self.json_url(Endpoints.Alarm_ArmAway.format(sub_id)),
             method=Method.PUT
         ).json()
-
+    
     def disarm(self, sub_id="0xffffffff"):
         return self.make_request(
             self.json_url(Endpoints.Alarm_Disarm.format(sub_id)),
             method=Method.PUT
         ).json()
-
-    def peripherals_status(self):
-        return self.make_request(
-            self.json_url(Endpoints.PeripheralsStatus)
-        ).json()
-
+    
     def bypass_zone(self, zone_id):
         return self.make_request(
             self.json_url(Endpoints.BypassZone.format(zone_id)),
@@ -234,12 +231,25 @@ class AxPro:
             method=Method.PUT
         ).json()
 
-    def get_area_arm_status(self, area_id):
+    def get_area_arm_status(self, area_ids):
         return self.make_request(
             self.json_url(Endpoints.AreaArmStatus),
             Method.POST,
-            json={"SubSysList": [{"SubSys": {"id": area_id}}]}
+            json={"SubSysList": [{"SubSys": {"id": area_id}} for area_id in area_ids]}
         ).json()
+    
+    def siren_test(self, siren_id):
+        return self.make_request(
+            self.json_url(Endpoints.SirenTest.format(siren_id)),
+            method=Method.PUT,
+            json={"SirenCtrl": {"operation":"start"}}
+        ).json()
+    
+    def batteries_status(self):
+        return self.make_request(self.json_url(Endpoints.BatteriesStatus)).json()
+    
+    def peripherals_status(self):
+        return self.make_request(self.json_url(Endpoints.PeripheralsStatus)).json()
 
     def zone_status(self):
         return self.make_request(self.json_url(Endpoints.ZoneStatus)).json()
