@@ -18,15 +18,11 @@ class IncorrectResponseContentError(Exception):
         super().__init__("Response content is not in expected form.")
 
 
-class UnexpectedResponseCodeError(Exception):
-    def __init__(self, responseCode, responseText):
+class AuthError(Exception):
+    def __init__(self, response_code, response_text):
         super().__init__(
-            f"Unexpected response status code {responseCode} returned with message {responseText}"
+            f"Auth error status code {response_code} returned with message {response_text}"
         )
-
-
-class AuthError(UnexpectedResponseCodeError):
-    pass
 
 
 class Endpoints:
@@ -196,9 +192,6 @@ class AxPro:
         if response.status_code == 401:
             self._auth()
             response = self.make_request(url, method, data, json)
-        elif response.status_code != 200:
-            raise UnexpectedResponseCodeError(response.status_code, response.text)
-
         return response
 
     def arm_home(self, sub_id="0xffffffff"):
