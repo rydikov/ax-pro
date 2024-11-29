@@ -1,12 +1,21 @@
 import hashlib
+import logging
 import requests
 import urllib.parse
 import xml.etree.ElementTree as ET
 
 from datetime import datetime
 
-XML_SCHEMA = "http://www.hikvision.com/ver20/XMLSchema"
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s %(levelname)s: %(message)s',
+    datefmt='%d/%m/%Y %H:%M:%S'
+)
 
+XML_SCHEMA = "http://www.hikvision.com/ver20/XMLSchema"
+LOW_PRIVILEGE_STATUS_CODE = 4
+
+logger = logging.getLogger(__name__)
 
 def sha256(input_string: str) -> str:
     sha256 = hashlib.sha256(input_string.encode())
@@ -189,7 +198,15 @@ class AxPro:
 
         response = request_func(url, headers={"Cookie": self.cookie}, data=data, json=json)
 
-        if response.status_code == 401:
+        logger.info(f'Making request with code: {response.status_code} {response.text}')
+
+        if (
+            response.status_code == 401 or 
+                (
+                    response.status_code == 400 and 
+                    response.json().get('statusCode') == LOW_PRIVILEGE_STATUS_CODE
+                )
+            ):
             self._auth()
             response = self.make_request(url, method, data, json)
         return response
