@@ -13,7 +13,11 @@ logging.basicConfig(
 )
 
 XML_SCHEMA = "http://www.hikvision.com/ver20/XMLSchema"
-LOW_PRIVILEGE_STATUS_CODE = 4
+
+
+THE_PARTITION_IS_ARMED_ERROR_CODE = 0x4000800B
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +25,9 @@ def sha256(input_string: str) -> str:
     sha256 = hashlib.sha256(input_string.encode())
     return sha256.hexdigest()
 
+class AlreadyArmedError(Exception):
+    def __init__(self):
+       super().__init__("The partition is already armed.")
 
 class IncorrectResponseContentError(Exception):
     def __init__(self):
@@ -120,18 +127,23 @@ class SessionLoginCap:
 class AxPro:
     """HikVisison Ax Pro Alarm panel coordinator."""
 
-    def __init__(self, host, username, password):
+    def __init__(self, host, username, password, user_level='1'):
         self.host = host
         self.username = username
         self.password = password
         self.cookie = ''
+        self.user_level = user_level # Specify the user type on AX Pro devices: 0-installer (default), 1-admin/operator.
 
     def _auth(self):
         q_user = urllib.parse.quote(self.username)
         q_password = urllib.parse.quote(self.password)
 
+        headers = {}
+        if self.user_level:
+            headers = {"X-Userlevel": self.user_level}
+
         # Step 1: Get XML auth data with panel username and password
-        response = requests.get(f"http://{q_user}:{q_password}@{self.host}{Endpoints.Session_Capabilities}{q_user}")
+        response = requests.get(f"http://{q_user}:{q_password}@{self.host}{Endpoints.Session_Capabilities}{q_user}", headers=headers)
 
         if response.status_code == 200:
             root = ET.fromstring(response.text)
@@ -160,7 +172,7 @@ class AxPro:
         # Step 2: Authenticate with XML and save cookies
         timestamp = datetime.now().timestamp()
         session_login_url = f"http://{self.host}{Endpoints.Session_Login}?timeStamp={int(timestamp)}"
-        login_response = requests.post(session_login_url, xml)
+        login_response = requests.post(session_login_url, xml, headers=headers)
 
         if login_response.status_code == 200:
             cookie = login_response.headers.get("Set-Cookie")
@@ -196,32 +208,39 @@ class AxPro:
             Method.PUT: requests.put
         }[method]
 
-        response = request_func(url, headers={"Cookie": self.cookie}, data=data, json=json)
+        headers={"Cookie": self.cookie}
+        if self.user_level:
+            headers["X-Userlevel"] = self.user_level
+
+        response = request_func(url, headers=headers, data=data, json=json)
 
         logger.info(f'Making request with code: {response.status_code} {response.text}')
 
-        if (
-            response.status_code == 401 or 
-                (
-                    response.status_code == 400 and 
-                    response.json().get('statusCode') == LOW_PRIVILEGE_STATUS_CODE
-                )
-            ):
+        if response.status_code == 401:
             self._auth()
             response = self.make_request(url, method, data, json)
+
         return response
 
     def arm_home(self, sub_id="0xffffffff"):
-        return self.make_request(
+        response = self.make_request(
             self.json_url(Endpoints.Alarm_ArmHome.format(sub_id)),
             method=Method.PUT
         ).json()
+        if response.get('errorCode') == THE_PARTITION_IS_ARMED_ERROR_CODE:
+            raise AlreadyArmedError
+        else:
+            return response
 
     def arm_away(self, sub_id="0xffffffff"):
-        return self.make_request(
+        response = self.make_request(
             self.json_url(Endpoints.Alarm_ArmAway.format(sub_id)),
             method=Method.PUT
         ).json()
+        if response.get('errorCode') == THE_PARTITION_IS_ARMED_ERROR_CODE:
+            raise AlreadyArmedError
+        else:
+            return response
     
     def disarm(self, sub_id="0xffffffff"):
         return self.make_request(
