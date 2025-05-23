@@ -1,1 +1,1 @@
-from .axpro import AxPro
+from .axpro import AxPro, AlreadyArmedError
