@@ -16,6 +16,7 @@ XML_SCHEMA = "http://www.hikvision.com/ver20/XMLSchema"
 
 
 THE_PARTITION_IS_ARMED_ERROR_CODE = 0x4000800B
+LOW_PRIVILEGE_ERROR_CODE = 0x40000002
 
 
 
@@ -216,7 +217,14 @@ class AxPro:
 
         logger.info(f'Making request with code: {response.status_code} {response.text}')
 
-        if response.status_code == 401:
+         if (
+            response.status_code == 401 or
+                (
+                    # After update to 1.3.0
+                    response.status_code == 400 and 
+                    response.json().get('errorCode') == LOW_PRIVILEGE_STATUS_CODE
+                )
+            ):
             self._auth()
             response = self.make_request(url, method, data, json)
 
