@@ -222,7 +222,7 @@ class AxPro:
                 (
                     # After update to 1.3.0
                     response.status_code == 400 and 
-                    response.json().get('errorCode') == LOW_PRIVILEGE_STATUS_CODE
+                    response.json().get('errorCode') == LOW_PRIVILEGE_ERROR_CODE
                 )
             ):
             self._auth()
