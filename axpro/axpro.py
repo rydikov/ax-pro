@@ -217,7 +217,7 @@ class AxPro:
 
         logger.info(f'Making request with code: {response.status_code} {response.text}')
 
-         if (
+        if (
             response.status_code == 401 or
                 (
                     # After update to 1.3.0
