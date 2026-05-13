@@ -80,6 +80,8 @@ class Endpoints:
     SirenTest = "/ISAPI/SecurityCP/Configuration/wirelessSiren/{}/ctrl"
     RepeaterStatus = "/ISAPI/SecurityCP/status/repeaterStatus"
     KeypadStatus = "/ISAPI/SecurityCP/status/keypadStatus"
+    RelaysStatus = "/ISAPI/SecurityCP/Configuration/outputModules"
+    RelayControl = " /ISAPI/SecurityCP/control/outputs/{}"
 
 
 class Method:
@@ -225,6 +227,7 @@ class AxPro:
                     response.json().get('errorCode') == LOW_PRIVILEGE_ERROR_CODE
                 )
             ):
+            logger.warning(f'Try to auth: {response.status_code} {response.text}')
             self._auth()
             response = self.make_request(url, method, data, json)
 
@@ -281,6 +284,23 @@ class AxPro:
             method=Method.PUT,
             json={"SirenCtrl": {"operation":"start"}}
         ).json()
+
+    def relay_open(self, relay_id):
+        return self.make_request(
+            self.json_url(Endpoints.RelayControl.format(relay_id)),
+            method=Method.PUT,
+            json={"OutputsCtrl": {"switch":"open"}},
+        ).json()
+
+    def relay_close(self, relay_id):
+        return self.make_request(
+            self.json_url(Endpoints.RelayControl.format(relay_id)),
+            method=Method.PUT,
+            json={"OutputsCtrl": {"switch":"close"}},
+        ).json()
+
+    def relays_status(self):
+        return self.make_request(self.json_url(Endpoints.RelaysStatus)).json()
     
     def batteries_status(self):
         return self.make_request(self.json_url(Endpoints.BatteriesStatus)).json()
