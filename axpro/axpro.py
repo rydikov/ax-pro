@@ -300,12 +300,12 @@ class AxPro:
             json={"OutputsCtrl":{"switch":"close"}}
         ).json()
 
-    def relays_open(self, relay_ids):
+    def relays_multi_control(self, relay_ids, switch="open"):
         releay_list = [{"id": relay_id} for relay_id in relay_ids]
         return self.make_request(
             self.json_url(Endpoints.RelaysControl),
             method=Method.POST,
-            json={"OutputsCtrl": {"switch":"open", "List":releay_list}},
+            json={"OutputsCtrl": {"switch":switch, "List":releay_list}},
         ).json()
 
     def relays_status(self):
