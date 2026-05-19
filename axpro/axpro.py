@@ -81,7 +81,8 @@ class Endpoints:
     RepeaterStatus = "/ISAPI/SecurityCP/status/repeaterStatus"
     KeypadStatus = "/ISAPI/SecurityCP/status/keypadStatus"
     RelaysStatus = "/ISAPI/SecurityCP/Configuration/outputModules"
-    RelayControl = " /ISAPI/SecurityCP/control/outputs/{}"
+    RelayControl = "/ISAPI/SecurityCP/control/outputs/{}"
+    RelaysControl = "/ISAPI/SecurityCP/control/outputs"
 
 
 class Method:
@@ -296,7 +297,15 @@ class AxPro:
         return self.make_request(
             self.json_url(Endpoints.RelayControl.format(relay_id)),
             method=Method.PUT,
-            json={"OutputsCtrl": {"switch":"close"}},
+            json={"OutputsCtrl":{"switch":"close"}}
+        ).json()
+
+    def relays_open(self, relay_ids):
+        releay_list = [{"id": relay_id} for relay_id in relay_ids]
+        return self.make_request(
+            self.json_url(Endpoints.RelaysControl),
+            method=Method.POST,
+            json={"OutputsCtrl": {"switch":"open", "List":releay_list}},
         ).json()
 
     def relays_status(self):
